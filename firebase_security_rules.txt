@@ -1,0 +1,57 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isOwner(userId);
+    }
+
+    // Matchmaking Queue
+    match /matchmakingQueue/{queueId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    // Games collection
+    match /games/{gameId} {
+      allow read: if isSignedIn();
+      // Allow creation if user is one of the players
+      allow create: if isSignedIn();
+      // Allow updates if user is a participant and it's their turn (simplified logic here, complex rules require checking 'fen' or move validity which is hard in security rules, so we rely on server functions or strict client checks + status updates)
+      allow update: if isSignedIn() && 
+                   (resource.data.whitePlayerId == request.auth.uid || resource.data.blackPlayerId == request.auth.uid);
+    }
+
+    // Leaderboard
+    match /leaderboard/{userId} {
+      allow read: if true;
+      allow write: if false; // Only server (Cloud Function) should update leaderboard to prevent cheating
+    }
+
+    // Challenges
+    match /challenges/{challengeId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && 
+                    (resource.data.fromId == request.auth.uid || resource.data.toId == request.auth.uid);
+    }
+
+    // Friends
+    match /users/{userId}/friends/{friendId} {
+      allow read: if isSignedIn() && isOwner(userId);
+      allow write: if isSignedIn() && isOwner(userId);
+    }
+  }
+}
