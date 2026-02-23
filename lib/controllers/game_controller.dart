@@ -25,6 +25,8 @@ class GameController extends GetxController {
   RxString currentTurn = 'w'.obs;
   RxList<String> validMoves = <String>[].obs;
   Rx<String?> selectedSquare = Rx<String?>(null);
+  RxList<String> whiteCaptured = <String>[].obs;
+  RxList<String> blackCaptured = <String>[].obs;
 
   // Time (milliseconds)
   RxInt whiteTime = 600000.obs;
@@ -43,6 +45,13 @@ class GameController extends GetxController {
 
   bool _gameOverHandled = false;
   RxBool moveLocked = false.obs;
+
+  @override
+  void onInit() {
+    super.onInit();
+    chess = chess_lib.Chess(); // Initialize with a default state to prevent LateInitializationError
+    _updateState();
+  }
 
   // -------------------- START GAME --------------------
 
@@ -66,15 +75,17 @@ class GameController extends GetxController {
       blackTime.value = onlineGame.blackTime;
       listenToGame();
     } else {
-      myColor = 'w';
+      myColor = asColor ?? 'w';
       whiteTime.value = 600000;
       blackTime.value = 600000;
     }
 
     _updateState();
 
-    if (currentMode != GameMode.online) {
-      _startLocalTimer();
+    _startLocalTimer();
+    
+    if (currentMode == GameMode.bot && myColor == 'b') {
+        Future.delayed(const Duration(milliseconds: 1000), _botMove);
     }
   }
 
@@ -83,14 +94,34 @@ class GameController extends GetxController {
   void _startLocalTimer() {
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (chess.game_over) return;
+      if (chess.game_over || _gameOverHandled) {
+        _timer?.cancel();
+        return;
+      }
 
-      if (chess.turn == chess_lib.Color.WHITE) {
-        whiteTime.value -= 1000;
-        if (whiteTime.value <= 0) _handleTimeout('w');
+      if (currentMode == GameMode.online && gameModel.value != null) {
+        final model = gameModel.value!;
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final elapsed = now - model.lastMoveAt;
+
+        if (chess.turn == chess_lib.Color.WHITE) {
+          int remaining = max(0, model.whiteTime - elapsed);
+          whiteTime.value = remaining;
+          if (remaining <= 0) _handleTimeout('w');
+        } else {
+          int remaining = max(0, model.blackTime - elapsed);
+          blackTime.value = remaining;
+          if (remaining <= 0) _handleTimeout('b');
+        }
       } else {
-        blackTime.value -= 1000;
-        if (blackTime.value <= 0) _handleTimeout('b');
+        // Local / Bot mode
+        if (chess.turn == chess_lib.Color.WHITE) {
+          whiteTime.value = max(0, whiteTime.value - 1000);
+          if (whiteTime.value <= 0) _handleTimeout('w');
+        } else {
+          blackTime.value = max(0, blackTime.value - 1000);
+          if (blackTime.value <= 0) _handleTimeout('b');
+        }
       }
     });
   }
@@ -294,6 +325,65 @@ class GameController extends GetxController {
     } else {
       history.value = pgn.replaceAll(RegExp(r'\d+\.'), '').replaceAll('\n', ' ').trim().split(' ').where((e) => e.isNotEmpty).toList();
     }
+    _calculateCapturedPieces();
+  }
+
+  void _calculateCapturedPieces() {
+    Map<String, int> initialCounts = {
+      'p': 8, 'n': 2, 'b': 2, 'r': 2, 'q': 1
+    };
+    Map<String, int> whiteCounts = {'p': 0, 'n': 0, 'b': 0, 'r': 0, 'q': 0};
+    Map<String, int> blackCounts = {'p': 0, 'n': 0, 'b': 0, 'r': 0, 'q': 0};
+
+    // Scan board
+    for (var piece in chess.board) { // chess.board is List<Piece?>
+       if (piece != null) {
+          String typeKey = '';
+           switch (piece.type) {
+             case chess_lib.PieceType.PAWN: typeKey = 'p'; break;
+             case chess_lib.PieceType.KNIGHT: typeKey = 'n'; break;
+             case chess_lib.PieceType.BISHOP: typeKey = 'b'; break;
+             case chess_lib.PieceType.ROOK: typeKey = 'r'; break;
+             case chess_lib.PieceType.QUEEN: typeKey = 'q'; break;
+             case chess_lib.PieceType.KING: typeKey = 'k'; break;
+             default: typeKey = 'p'; 
+          }
+
+          if (piece.color == chess_lib.Color.WHITE) {
+             whiteCounts[typeKey] = (whiteCounts[typeKey] ?? 0) + 1;
+          } else {
+             blackCounts[typeKey] = (blackCounts[typeKey] ?? 0) + 1;
+          }
+       }
+    }
+
+    List<String> wCaptured = [];
+    List<String> bCaptured = [];
+
+    // White's captured (What white has TAKEN from Black) -> Should be Initial Black - Current Black
+    initialCounts.forEach((type, count) {
+       int current = blackCounts[type] ?? 0;
+       int captured = count - current;
+       for (int i = 0; i < captured; i++) {
+          wCaptured.add(type); 
+       }
+    });
+
+    // Black's captured (What black has TAKEN from White) -> Should be Initial White - Current White
+    initialCounts.forEach((type, count) {
+       int current = whiteCounts[type] ?? 0;
+       int captured = count - current;
+       for (int i = 0; i < captured; i++) {
+          bCaptured.add(type); 
+       }
+    });
+    
+    final validOrder = ['q', 'r', 'b', 'n', 'p'];
+    wCaptured.sort((a, b) => validOrder.indexOf(a).compareTo(validOrder.indexOf(b)));
+    bCaptured.sort((a, b) => validOrder.indexOf(a).compareTo(validOrder.indexOf(b)));
+
+    whiteCaptured.value = wCaptured;
+    blackCaptured.value = bCaptured;
   }
 
   // -------------------- GAME OVER --------------------
@@ -305,13 +395,26 @@ class GameController extends GetxController {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final user = _auth.appUser.value;
-      bool iWon = user != null && winnerId == user.id;
-
-      if (winnerId != null && user != null) {
-        _db.updateUserStats(user.id, iWon ? 10 : -10, iWon);
+      if (user != null) {
+        String result = 'draw';
+        int points = 0;
+        
+        if (winnerId != null) {
+          if (winnerId == user.id) {
+            result = 'win';
+            points = 10;
+          } else {
+            result = 'loss';
+            points = -10;
+          }
+        }
+        
+        // Update Firebase stats
+        _db.updateUserStats(user.id, points, result);
       }
 
       bool opponentLeft = gameModel.value?.leftBy != null && gameModel.value?.leftBy != myColor;
+      bool iWon = user != null && winnerId == user.id;
 
       Get.defaultDialog(
         title: opponentLeft 
@@ -337,7 +440,7 @@ class GameController extends GetxController {
     // Show confirmation dialog
     bool exit = await Get.defaultDialog<bool>(
       title: "Exit Game?",
-      middleText: "Are you sure you want to leave the game?",
+      middleText: "Are you sure you want to leave the game? You will lose points.",
       textConfirm: "Yes",
       textCancel: "No",
       confirmTextColor: Colors.white,
@@ -347,29 +450,100 @@ class GameController extends GetxController {
       onCancel: () {
         Get.back(result: false);
       },
-    ) ??
-        false;
+    ) ?? false;
 
     if (exit) {
-      // Stop timer & subscription
-      _timer?.cancel();
-      gameSubscription?.cancel();
+      final user = _auth.appUser.value;
 
-      // Handle online game cleanup
+      // Handle online game cleanup before navigating away
       if (currentMode == GameMode.online && gameModel.value != null) {
         final game = gameModel.value!;
-        String winnerId = myColor == 'w' ? game.blackPlayerId : game.whitePlayerId;
-        _db.updateGame(game.copyWith(
+        String opponentId = myColor == 'w' ? game.blackPlayerId : game.whitePlayerId;
+        
+        // 1. Mark game as finished with opponent as winner
+        await _db.updateGame(game.copyWith(
           status: 'finished',
-          winnerId: winnerId,
-          leftBy: myColor, // mark who left
+          winnerId: opponentId,
+          leftBy: myColor, 
           lastMoveAt: DateTime.now().millisecondsSinceEpoch,
         ));
+        
+        // 2. Penalize the leaver immediately
+        if (user != null) {
+          await _db.updateUserStats(user.id, -10, 'loss');
+        }
+
+        // Set flag to prevent double processing if stream still alive
+        _gameOverHandled = true; 
+      } else if (currentMode == GameMode.bot || currentMode == GameMode.local) {
+        // For non-online games, maybe just count as a loss if mid-game?
+        // User didn't specify, but let's keep it simple.
+        if (user != null && !chess.game_over) {
+           _db.updateUserStats(user.id, -5, 'loss');
+        }
       }
 
-      // Close the current screen
-      Get.back();
+      _timer?.cancel();
+      gameSubscription?.cancel();
+      Get.offAllNamed('/home');
     }
+  }
+
+  // -------------------- ACTIONS --------------------
+
+  void undoMove() {
+    if (currentMode == GameMode.online) return; // No undo in online ranked
+    
+    chess.undo(); // Undo opponent's move (or last move)
+    if (currentMode == GameMode.bot) {
+       chess.undo(); // Undo my move
+    }
+    _updateState();
+  }
+
+  Future<void> resignGame() async {
+    bool confirm = await Get.defaultDialog<bool>(
+      title: "Resign?",
+      middleText: "Are you sure you want to resign the game?",
+      textConfirm: "Yes",
+      textCancel: "No",
+      confirmTextColor: Colors.white,
+      onConfirm: () => Get.back(result: true),
+      onCancel: () => Get.back(result: false),
+    ) ?? false;
+
+    if (confirm) {
+      final user = _auth.appUser.value;
+      if (currentMode == GameMode.online && gameModel.value != null) {
+        final game = gameModel.value!;
+        final winnerId = myColor == 'w' ? game.blackPlayerId : game.whitePlayerId;
+        
+        await _db.updateGame(game.copyWith(status: 'finished', winnerId: winnerId));
+        if (user != null) {
+          await _db.updateUserStats(user.id, -10, 'loss');
+        }
+        _gameOverHandled = true;
+      } else if (user != null && !chess.game_over) {
+         _db.updateUserStats(user.id, -5, 'loss');
+      }
+      
+      _timer?.cancel();
+      gameSubscription?.cancel();
+      Get.offAllNamed('/home');
+    }
+  }
+
+  void offerDraw() {
+     if (currentMode != GameMode.online) return;
+     Get.snackbar("Draw Offered", "Feature coming soon for online play");
+  }
+
+  void getHint() {
+      final moves = chess.moves();
+      if (moves.isNotEmpty) {
+          final randomMove = moves[Random().nextInt(moves.length)]; // Placeholder for Stockfish
+          Get.snackbar("Hint", "Try moving: ${randomMove.toString()}");
+      }
   }
 
   @override

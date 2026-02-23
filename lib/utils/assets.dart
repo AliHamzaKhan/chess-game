@@ -1,16 +1,34 @@
 class Assets {
+  // Avatars
+  static const String avatar1 = 'assets/avatars/avatar1.png';
+  static const String avatar2 = 'assets/avatars/avatar2.png';
+  static const String avatar3 = 'assets/avatars/avatar3.png';
+  static const String avatar4 = 'assets/avatars/avatar4.png';
+  static const String botAlice = 'assets/avatars/alice.png';
+  static const String botMarcus = 'assets/avatars/marcus.png';
+  static const String botStockfish = 'assets/avatars/stockfish.png';
+
+  // Images
+  static const String chessBoardThumb = 'assets/images/chess_board_thumb.png';
+  static const String dailyPuzzle = 'assets/images/daily_puzzle.png';
+  static const String learnBanner = 'assets/images/learn_banner.png';
+
+  // App Icon
+  static const String appIcon = 'assets/app_Icon.png';
+
+  // Pieces
   static const Map<String, String> pieces = {
-    'p': 'https://upload.wikimedia.org/wikipedia/commons/c/c7/Chess_pdt45.svg',
-    'n': 'https://upload.wikimedia.org/wikipedia/commons/e/ef/Chess_ndt45.svg',
-    'b': 'https://upload.wikimedia.org/wikipedia/commons/9/98/Chess_bdt45.svg',
-    'r': 'https://upload.wikimedia.org/wikipedia/commons/f/ff/Chess_rdt45.svg',
-    'q': 'https://upload.wikimedia.org/wikipedia/commons/4/47/Chess_qdt45.svg',
-    'k': 'https://upload.wikimedia.org/wikipedia/commons/f/f0/Chess_kdt45.svg',
-    'P': 'https://upload.wikimedia.org/wikipedia/commons/4/45/Chess_plt45.svg',
-    'N': 'https://upload.wikimedia.org/wikipedia/commons/7/70/Chess_nlt45.svg',
-    'B': 'https://upload.wikimedia.org/wikipedia/commons/b/b1/Chess_blt45.svg',
-    'R': 'https://upload.wikimedia.org/wikipedia/commons/7/72/Chess_rlt45.svg',
-    'Q': 'https://upload.wikimedia.org/wikipedia/commons/1/15/Chess_qlt45.svg',
-    'K': 'https://upload.wikimedia.org/wikipedia/commons/4/42/Chess_klt45.svg',
+    'p': 'assets/pieces/black-pawn.png',
+    'n': 'assets/pieces/black-knight.png',
+    'b': 'assets/pieces/black-bishop.png',
+    'r': 'assets/pieces/black-rook.png',
+    'q': 'assets/pieces/black-queen.png',
+    'k': 'assets/pieces/black-king.png',
+    'P': 'assets/pieces/white-pawn.png',
+    'N': 'assets/pieces/white-knight.png',
+    'B': 'assets/pieces/white-bishop.png',
+    'R': 'assets/pieces/white-rook.png',
+    'Q': 'assets/pieces/white-queen.png',
+    'K': 'assets/pieces/white-king.png',
   };
 }

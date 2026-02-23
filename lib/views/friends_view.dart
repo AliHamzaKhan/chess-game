@@ -17,18 +17,82 @@ class FriendsView extends StatelessWidget {
   Widget build(BuildContext context) {
     return BackgroundScaffold(
       appBar: AppBar(
-        title: const Text("My Friends"),
+        title: const Text("Community"),
         backgroundColor: Colors.transparent,
         elevation: 0,
       ),
-      body: Column(
-        children: [
-          _buildAddFriendSection(context),
-          const SizedBox(height: 20),
-          Expanded(child: _buildFriendList(context)),
-        ],
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            _buildAddFriendSection(context),
+            _buildRequestsList(context),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text("Friends", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              ),
+            ),
+            _buildFriendList(context),
+          ],
+        ),
       ),
     );
+  }
+
+  Widget _buildRequestsList(BuildContext context) {
+    return Obx(() {
+      if (controller.incomingRequests.isEmpty) return const SizedBox.shrink();
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Text("Pending Requests", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ),
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: controller.incomingRequests.length,
+            itemBuilder: (context, index) {
+              final request = controller.incomingRequests[index];
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: GlassContainer(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: Colors.blue.withOpacity(0.2),
+                        child: Text(request.fromName[0].toUpperCase()),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(request.fromName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                      Row(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.check_circle_outline, color: Colors.green),
+                            onPressed: () => controller.acceptRequest(request),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.cancel_outlined, color: Colors.redAccent),
+                            onPressed: () => controller.rejectRequest(request.id),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      );
+    });
   }
 
   Widget _buildAddFriendSection(BuildContext context) {
@@ -43,7 +107,7 @@ class FriendsView extends StatelessWidget {
               child: TextField(
                 controller: textController,
                 decoration: const InputDecoration(
-                  hintText: "Enter User ID to add",
+                  hintText: "Search by User ID...",
                   border: InputBorder.none,
                 ),
               ),
@@ -54,9 +118,9 @@ class FriendsView extends StatelessWidget {
                   child: CircularProgressIndicator(strokeWidth: 2)
                 )
               : IconButton(
-                  icon: const Icon(Icons.person_add_alt_1_outlined),
+                  icon: const Icon(Icons.search),
                   onPressed: () {
-                    controller.addFriend(textController.text);
+                    controller.sendRequest(textController.text);
                     textController.clear();
                   },
                 )),
@@ -69,9 +133,14 @@ class FriendsView extends StatelessWidget {
   Widget _buildFriendList(BuildContext context) {
     return Obx(() {
       if (controller.friends.isEmpty) {
-        return const Center(child: Text("You haven't added any friends yet."));
+        return const Center(child: Padding(
+          padding: EdgeInsets.all(32.0),
+          child: Text("No friends yet. Add some to play!"),
+        ));
       }
       return ListView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
         padding: const EdgeInsets.symmetric(horizontal: 16),
         itemCount: controller.friends.length,
         itemBuilder: (context, index) {
@@ -91,7 +160,7 @@ class FriendsView extends StatelessWidget {
                       Stack(
                         children: [
                           CircleAvatar(
-                            backgroundColor: Theme.of(context).primaryColor.withOpacity(0.2),
+                            backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
                             child: Text(friend.username.isNotEmpty ? friend.username[0].toUpperCase() : "?"),
                           ),
                           Positioned(
@@ -114,18 +183,21 @@ class FriendsView extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(friend.username, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            Text(friend.username, style: const TextStyle(fontWeight: FontWeight.bold)),
                             Row(
                               children: [
-                                Text("Points: ${friend.points}", style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor)),
+                                Text("Lvl ${friend.level}", style: TextStyle(fontSize: 11, color: Theme.of(context).primaryColor, fontWeight: FontWeight.bold)),
                                 const SizedBox(width: 8),
+                                Text("${friend.points} pts", style: TextStyle(fontSize: 11, color: Theme.of(context).hintColor)),
+                                const SizedBox(width: 8),
+                                Container(
+                                  width: 4, height: 4, 
+                                  decoration: BoxDecoration(color: isOnline ? Colors.green : Colors.grey, shape: BoxShape.circle)
+                                ),
+                                const SizedBox(width: 4),
                                 Text(
                                   isOnline ? "Online" : "Offline",
-                                  style: TextStyle(
-                                    fontSize: 10, 
-                                    color: isOnline ? Colors.green : Theme.of(context).hintColor,
-                                    fontWeight: isOnline ? FontWeight.bold : FontWeight.normal,
-                                  ),
+                                  style: TextStyle(fontSize: 10, color: isOnline ? Colors.green : Theme.of(context).hintColor),
                                 ),
                               ],
                             ),
@@ -135,14 +207,13 @@ class FriendsView extends StatelessWidget {
                       Row(
                         children: [
                           IconButton(
-                            icon: const Icon(Icons.play_circle_outline, color: Colors.green),
-                            tooltip: "Challenge",
+                            icon: const Icon(Icons.bolt, color: Colors.amber),
+                            tooltip: "Quick Challenge",
                             onPressed: () => matchmakingService.sendChallenge(friend.id),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.person_remove_outlined, color: Colors.redAccent),
-                            tooltip: "Remove",
-                            onPressed: () => _showRemoveDialog(context, friend.id, friend.username),
+                            icon: const Icon(Icons.more_vert),
+                            onPressed: () => _showFriendOptions(context, friend),
                           ),
                         ],
                       ),
@@ -155,6 +226,35 @@ class FriendsView extends StatelessWidget {
         },
       );
     });
+  }
+
+  void _showFriendOptions(BuildContext context, AppUser friend) {
+    Get.bottomSheet(
+      GlassContainer(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.person),
+              title: const Text("View Profile"),
+              onTap: () {
+                Get.back();
+                // Profile view logic
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.person_remove, color: Colors.redAccent),
+              title: const Text("Remove Friend", style: TextStyle(color: Colors.redAccent)),
+              onTap: () {
+                Get.back();
+                _showRemoveDialog(context, friend.id, friend.username);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showRemoveDialog(BuildContext context, String friendId, String username) {

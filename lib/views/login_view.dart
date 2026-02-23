@@ -17,13 +17,13 @@ class LoginView extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.sports_esports, size: 100, color: Colors.indigo),
+              Icon(Icons.sports_esports, size: 100, color: Theme.of(context).primaryColor),
               const SizedBox(height: 20),
               Text(
                 'Chess Master',
                 style: Theme.of(context).textTheme.headlineLarge?.copyWith(
                   fontWeight: FontWeight.bold,
-                  color: Colors.indigo,
+                  color: Theme.of(context).primaryColor,
                 ),
               ),
               const SizedBox(height: 40),

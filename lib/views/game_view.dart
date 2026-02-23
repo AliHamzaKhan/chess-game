@@ -6,6 +6,7 @@ import '../services/auth_service.dart';
 import '../widgets/background_scaffold.dart';
 import '../widgets/glass_container.dart';
 import '../widgets/move_history_sheet.dart';
+import '../widgets/captured_pieces_widget.dart';
 
 class GameView extends StatelessWidget {
   final GameController controller = Get.find();
@@ -16,30 +17,31 @@ class GameView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false, // disables default back behavior
-      onPopInvokedWithResult: (backPressResult, _) async {
-        // Call controller exit function
-        await controller.exitGame();
+      canPop: false, 
+      onPopInvokedWithResult: (backPressResult, result) async {
+         if (backPressResult) return;
+         await controller.exitGame();
       },
       child: BackgroundScaffold(
         appBar: AppBar(
-          title: const Text("Chess Master"),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => controller.exitGame(),
+          ),
+          title: Obx(() {
+             String mode = "Unknown";
+             if (controller.currentMode == GameMode.online) mode = "Ranked";
+             else if (controller.currentMode == GameMode.bot) mode = "vs Computer";
+             else mode = "Pass & Play";
+             return Column(
+               children: [
+                 Text(mode, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                 if (controller.currentMode == GameMode.online || controller.currentMode == GameMode.bot)
+                    const Text("BLITZ • 10 MIN", style: TextStyle(fontSize: 10, color: Colors.grey))
+               ],
+             );
+          }),
           centerTitle: true,
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          actions: [
-              IconButton(
-                  icon: const Icon(Icons.history),
-                  tooltip: "Move History",
-                  onPressed: () {
-                      Get.bottomSheet(
-                          MoveHistorySheet(),
-                          isScrollControlled: true,
-                          enableDrag: true
-                      );
-                  },
-              ),
-          ],
         ),
         body: SafeArea(
           child: Column(
@@ -73,6 +75,18 @@ class GameView extends StatelessWidget {
                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                  child: _buildPlayerInfo(true, context),
               ),
+
+              const SizedBox(height: 16),
+              
+              // Move History Line
+              _buildMoveHistoryLine(context),
+
+              const SizedBox(height: 16),
+
+              // Bottom Controls
+              _buildBottomControls(context),
+              
+              const SizedBox(height: 20),
             ],
           ),
         ),
@@ -82,190 +96,200 @@ class GameView extends StatelessWidget {
 
   Widget _buildPlayerInfo(bool isMe, BuildContext context) {
     return Obx(() {
-      String name = "";
+      String name = "Unknown";
       int timeMs = 0;
       bool isTurn = false;
-      bool showingWhite = true;
+      int rating = 1200;
+      String rowColor = 'w';
 
-      // --- Local / Bot game ---
-      if (controller.currentMode == GameMode.local || controller.currentMode == GameMode.bot) {
-        name = isMe ? "You" : (controller.currentMode == GameMode.bot ? "Bot" : "Opponent");
-        timeMs = isMe ? controller.whiteTime.value : controller.blackTime.value;
-        showingWhite = isMe; // Me = White, Opponent/Bot = Black
-        isTurn = isMe ? controller.currentTurn.value == 'w' : controller.currentTurn.value == 'b';
+      // --- Determine Row Color & Basic Info ---
+      if (controller.currentMode == GameMode.local) {
+         // Local Pass & Play: Bottom (isMe=true) is usually White for simplicity in this MVP, 
+         // or we can say P1 vs P2. Let's assume Bottom=White, Top=Black.
+         rowColor = isMe ? 'w' : 'b';
+         name = isMe ? "White" : "Black";
+         timeMs = isMe ? controller.whiteTime.value : controller.blackTime.value;
+         isTurn = isMe ? controller.currentTurn.value == 'w' : controller.currentTurn.value == 'b';
+      } 
+      else if (controller.currentMode == GameMode.bot) {
+         // Bot Game
+         String myC = controller.myColor ?? 'w';
+         rowColor = isMe ? myC : (myC == 'w' ? 'b' : 'w');
+         
+         if (isMe) {
+            name = "You";
+            rating = auth.appUser.value?.elo ?? 1200;
+         } else {
+            name = "Bot (${controller.botDifficulty.name})";
+            rating = 1000 + (controller.botDifficulty.index * 400); 
+         }
+         timeMs = rowColor == 'w' ? controller.whiteTime.value : controller.blackTime.value;
+         bool isWhiteTurn = controller.currentTurn.value == 'w';
+         isTurn = (rowColor == 'w' && isWhiteTurn) || (rowColor == 'b' && !isWhiteTurn);
       }
-      // --- Online / 1v1 game ---
       else {
-        final game = controller.gameModel.value;
-        if (game == null) return const SizedBox.shrink();
-
-        final myColor = controller.myColor ?? 'w'; // Default to 'w'
-        final opponentColor = myColor == 'w' ? 'b' : 'w';
-
-        // Determine which color this row represents
-        String rowColor = isMe ? myColor : opponentColor;
-
-        // Correctly assign name
-        if (controller.currentMode == GameMode.bot && !isMe) {
-          name = "Bot";
-        } else if (rowColor == 'w') {
-          name = game.whitePlayerName;
-        } else {
-          name = game.blackPlayerName;
-        }
-
-        // Timer
-        timeMs = rowColor == 'w' ? controller.whiteTime.value : controller.blackTime.value;
-
-        // Turn
-        isTurn = game.currentTurn == rowColor;
-
-        // For avatar/piece color
-        showingWhite = rowColor == 'w';
+         // Online Game
+         final game = controller.gameModel.value;
+         if (game != null) {
+            String myC = controller.myColor ?? 'w';
+            rowColor = isMe ? myC : (myC == 'w' ? 'b' : 'w');
+            
+            if (rowColor == 'w') {
+               name = game.whitePlayerName;
+               // Setup opponent rating if available, else mock
+            } else {
+               name = game.blackPlayerName;
+            }
+            
+            timeMs = rowColor == 'w' ? controller.whiteTime.value : controller.blackTime.value;
+            isTurn = game.currentTurn == rowColor;
+         }
+         if (isMe) rating = auth.appUser.value?.elo ?? 1200;
       }
 
-      return AnimatedScale(
-        scale: isTurn ? 1.03 : 1.0,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 400),
-          curve: Curves.easeInOut,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: isTurn
-                ? Theme.of(context).primaryColor.withOpacity(0.25)
-                : Colors.black.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isTurn ? Theme.of(context).primaryColor : Colors.white.withOpacity(0.1),
-              width: isTurn ? 2.5 : 1,
-            ),
-            boxShadow: isTurn
-                ? [
-              BoxShadow(
-                color: Theme.of(context).primaryColor.withOpacity(0.5),
-                blurRadius: 16,
-                spreadRadius: 1,
-              )
-            ]
-                : [],
-          ),
-          child: Row(
-            children: [
-              // Color Indicator / Avatar
-              Stack(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(2),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: showingWhite ? Colors.white : Colors.black, width: 2),
-                      shape: BoxShape.circle,
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+           Expanded(
+             child: Row(
+               children: [
+                 Stack(
+                   children: [
+                     Container(
+                       padding: const EdgeInsets.all(2),
+                       decoration: BoxDecoration(
+                         shape: BoxShape.circle,
+                         border: isTurn ? Border.all(color: Colors.green, width: 2) : null,
+                       ),
+                       child: CircleAvatar(
+                         radius: 20,
+                         backgroundColor: Colors.grey.withOpacity(0.2),
+                         backgroundImage: isMe 
+                             ? const AssetImage('assets/avatars/avatar1.png') 
+                             : (controller.currentMode == GameMode.bot ? const AssetImage('assets/avatars/alice.png') : null),
+                         child: (controller.currentMode != GameMode.bot && !isMe) ? const Icon(Icons.person) : null,
+                       ),
+                     ),
+                     if (isTurn)
+                       Positioned(bottom: 0, right: 0, child: Container(width: 12, height: 12, decoration: BoxDecoration(color: Colors.green, shape: BoxShape.circle, border: Border.all(color: Theme.of(context).scaffoldBackgroundColor, width: 2))))
+                   ]
+                 ),
+                 const SizedBox(width: 12),
+                 Column(
+                   crossAxisAlignment: CrossAxisAlignment.start,
+                   children: [
+                     Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                     Text("Rating: $rating", style: TextStyle(fontSize: 12, color: Theme.of(context).hintColor)),
+                   ],
+                 ),
+                 const SizedBox(width: 12),
+                 Expanded(
+                    child: SingleChildScrollView(
+                       scrollDirection: Axis.horizontal,
+                       child: CapturedPiecesWidget(
+                           capturedPieces: rowColor == 'w' ? controller.whiteCaptured : controller.blackCaptured,
+                           areWhitePieces: rowColor == 'b',
+                       ),
                     ),
-                    child: CircleAvatar(
-                      radius: 20,
-                      backgroundColor: Colors.grey.shade300,
-                      child: Text(
-                        name.isNotEmpty ? name[0].toUpperCase() : "?",
-                        style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade800),
-                      ),
-                    ),
-                  ),
-                  // Small piece indicator
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
-                    child: Container(
-                      width: 16,
-                      height: 16,
-                      decoration: BoxDecoration(
-                        color: showingWhite ? Colors.white : Colors.black,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.grey, width: 1),
-                      ),
-                    ),
-                  )
-                ],
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      isMe ? "You" : name,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: isTurn ? FontWeight.bold : FontWeight.normal,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (isTurn)
-                      Row(
-                        children: [
-                          SizedBox(
-                            width: 12,
-                            height: 12,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Theme.of(context).colorScheme.secondary),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(isMe ? "Your Turn" : "Their Turn",
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  color: Theme.of(context).colorScheme.secondary,
-                                  fontWeight: FontWeight.bold)),
-                        ],
-                      )
-                    else
-                      Text(showingWhite ? "Playing as White" : "Playing as Black",
-                          style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                  ],
-                ),
-              ),
-              _buildTimer(timeMs, isTurn, context),
-            ],
-          ),
-        ),
+                 ),
+               ]
+             ),
+           ),
+           const SizedBox(width: 8),
+           _buildTimer(timeMs, isTurn, context),
+        ],
       );
     });
   }
-
 
   Widget _buildTimer(int ms, bool isTurn, BuildContext context) {
       if (ms < 0) ms = 0;
       int seconds = (ms / 1000).floor();
       int minutes = (seconds / 60).floor();
       int remainingSeconds = seconds % 60;
-
       String text = "${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}";
 
-      return AnimatedContainer(
-        duration: const Duration(milliseconds: 400),
+      return Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: isTurn
-              ? Theme.of(context).colorScheme.primary
-              : Colors.grey[800],
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: isTurn
-              ? [
-            BoxShadow(
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.7),
-              blurRadius: 12,
-              spreadRadius: 1,
-            )
-          ]
-              : [],
+          color: isTurn ? const Color(0xFF2E2E2E) : const Color(0xFF1E1E1E), // Dark timer bg
+          borderRadius: BorderRadius.circular(8),
+          border: isTurn ? Border.all(color: Colors.white.withOpacity(0.2)) : null,
         ),
         child: Text(
           text,
-          style: const TextStyle(
+          style: TextStyle(
             fontFamily: 'Courier',
-            color: Colors.white,
+            color: isTurn ? Colors.white : Colors.grey,
             fontWeight: FontWeight.bold,
             fontSize: 18,
           ),
         ),
       );
+  }
+
+  Widget _buildMoveHistoryLine(BuildContext context) {
+    return Obx(() {
+       List<String> history = controller.history;
+       if (history.isEmpty) return const SizedBox.shrink();
+       
+       String lastMove = history.last;
+       String secondLast = history.length > 1 ? "${(history.length/2).ceil()}... ${history[history.length-2]}" : "";
+       String display = "$secondLast   ${(history.length/2).ceil()}. $lastMove";
+       if (history.length % 2 != 0) {
+          // White just moved
+          display = "${(history.length/2).ceil()}. $lastMove";
+       }
+
+       return Container(
+         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+         decoration: BoxDecoration(
+           color: Theme.of(context).cardTheme.color,
+           borderRadius: BorderRadius.circular(12),
+         ),
+         child: Text(
+           display, 
+           style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'Courier', fontSize: 16, color: Colors.blueAccent)
+         ),
+       );
+    });
+  }
+
+  Widget _buildBottomControls(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _controlButton(context, Icons.flag_outlined, "Resign", () => controller.resignGame()),
+          _controlButton(context, Icons.handshake_outlined, "Draw", () => controller.offerDraw()),
+          if (controller.currentMode == GameMode.online) _controlButton(context, Icons.chat_bubble_outline, "Chat", () => Get.toNamed('/chat')),
+          _controlButton(context, Icons.lightbulb_outline, "Hint", () => controller.getHint(), isHighlight: true),
+        ],
+      ),
+    );
+  }
+
+  Widget _controlButton(BuildContext context, IconData icon, String label, VoidCallback onTap, {bool isHighlight = false}) {
+     return InkWell(
+       onTap: onTap,
+       borderRadius: BorderRadius.circular(12),
+       child: Container(
+         width: 70,
+         height: 70,
+         decoration: BoxDecoration(
+           color: isHighlight ? const Color(0xFF4F46E5) : Theme.of(context).cardTheme.color,
+           borderRadius: BorderRadius.circular(16),
+         ),
+         child: Column(
+           mainAxisAlignment: MainAxisAlignment.center,
+           children: [
+             Icon(icon, color: isHighlight ? Colors.white : Theme.of(context).iconTheme.color),
+             const SizedBox(height: 4),
+             Text(label, style: TextStyle(fontSize: 10, color: isHighlight ? Colors.white : Theme.of(context).hintColor, fontWeight: FontWeight.bold)),
+           ],
+         ),
+       ),
+     );
   }
 }

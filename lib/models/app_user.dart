@@ -10,6 +10,10 @@ class AppUser {
   final int level;
   final bool isOnline;
   final int lastSeen;
+  final List<int> ratingHistory;
+
+  int get elo => points;
+  int get rank => 1204; // Placeholder for global rank
 
   AppUser({
     required this.id,
@@ -23,6 +27,7 @@ class AppUser {
     this.level = 1,
     this.isOnline = false,
     this.lastSeen = 0,
+    this.ratingHistory = const [],
   });
 
   Map<String, dynamic> toMap() {
@@ -38,6 +43,7 @@ class AppUser {
       'level': level,
       'isOnline': isOnline,
       'lastSeen': lastSeen,
+      'ratingHistory': ratingHistory,
     };
   }
 
@@ -54,6 +60,7 @@ class AppUser {
       level: map['level'] ?? 1,
       isOnline: map['isOnline'] ?? false,
       lastSeen: map['lastSeen'] ?? 0,
+      ratingHistory: List<int>.from(map['ratingHistory'] ?? []),
     );
   }
 }

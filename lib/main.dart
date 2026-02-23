@@ -6,12 +6,16 @@ import 'package:get/get.dart';
 import 'theme/app_theme.dart';
 import 'views/login_view.dart';
 import 'views/home_view.dart';
+import 'views/main_view.dart';
 import 'views/game_view.dart';
 import 'views/profile_view.dart';
 import 'views/leaderboard_view.dart';
 import 'views/friends_view.dart';
 import 'utils/dependency_injection.dart';
 import 'controllers/theme_controller.dart';
+import 'views/splash_screen.dart';
+import 'views/settings_view.dart';
+import 'views/match_history_view.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -47,15 +51,18 @@ class MyApp extends StatelessWidget {
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,
         themeMode: themeController.isDarkMode ? ThemeMode.dark : ThemeMode.light,
-        initialRoute: '/login',
+        initialRoute: '/splash',
         // AuthService will redirect to /home if authenticated
         getPages: [
+          GetPage(name: '/splash', page: () => const SplashScreen()),
           GetPage(name: '/login', page: () => LoginView()),
-          GetPage(name: '/home', page: () => HomeView()),
+          GetPage(name: '/home', page: () => const MainView()),
           GetPage(name: '/game', page: () => GameView()),
           GetPage(name: '/profile', page: () => ProfileView()),
           GetPage(name: '/leaderboard', page: () => LeaderboardView()),
           GetPage(name: '/friends', page: () => FriendsView()),
+          GetPage(name: '/settings', page: () => const SettingsView()),
+          GetPage(name: '/match_history', page: () => MatchHistoryView()),
         ],
         debugShowCheckedModeBanner: false,
       ),

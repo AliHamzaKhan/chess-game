@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import '../controllers/game_controller.dart';
-import '../utils/assets.dart';
 import 'package:chess/chess.dart' as chess_lib;
+
+import '../utils/assets.dart';
 
 class ChessBoardWidget extends StatelessWidget {
   final GameController controller = Get.find();
@@ -158,8 +158,8 @@ class ChessBoardWidget extends StatelessWidget {
            key = key.toUpperCase();
        }
        return Padding(
-           padding: const EdgeInsets.all(2.0),
-           child: SvgPicture.network(Assets.pieces[key]!),
+           padding: EdgeInsetsGeometry.all(5),
+           child: Image.asset(Assets.pieces[key]!),
        );
   }
 }
