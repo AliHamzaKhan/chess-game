@@ -14,7 +14,7 @@ class Lesson {
   Lesson({required this.id, required this.title, required this.subtitle, required this.description, required this.content, required this.iconCodePoint, required this.colorValue, required this.category});
 
   // Helper to get IconData
-  IconData get icon => IconData(iconCodePoint, fontFamily: 'MaterialIcons');
+  IconData get icon => IconData(iconCodePoint,);
 
   // Helper to get Color
   Color get color => Color(colorValue);
